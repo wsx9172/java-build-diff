@@ -34,29 +34,52 @@ public class Util {
     public static Map<String, Path> scan(Path root) throws IOException {
         Map<String, Path> map = new HashMap<>();
         try (Stream<Path> stream = Files.walk(root)) {
-            stream.filter(p -> p.toString().endsWith(".class")).forEach(x -> {
-                String name = root.relativize(x).toString().replace('\\', '.').replace('/', '.');
+            stream.filter(path -> path.toString().endsWith(".class")).forEach(classFile -> {
+                String name = root.relativize(classFile).toString().replace('\\', '.').replace('/', '.');
                 name = name.substring(0, name.length() - 6); // 去掉 ".class" 后缀
-                map.put(name, x);
+                map.put(name, classFile);
             });
         }
         return map;
     }
 
-    /** 递归删除目录。异常发生时尽最大努力清空。 */
+    /** 扫描非 class 资源文件，返回 相对路径 → Path */
+    public static Map<String, Path> scanResources(Path root) throws IOException {
+        Map<String, Path> map = new LinkedHashMap<>();
+        if (!Files.exists(root))
+            return map;
+        try (Stream<Path> stream = Files.walk(root)) {
+            stream.filter(path -> Files.isRegularFile(path) && !path.toString().endsWith(".class"))
+                    .forEach(resourceFile -> {
+                        String name = root.relativize(resourceFile).toString().replace('\\', '/');
+                        map.put(name, resourceFile);
+                    });
+        }
+        return map;
+    }
+
+    /** 递归删除目录。异常发生时尽最大努力清空，收集并报告失败项。 */
     public static void deleteRecursively(Path dir) {
         if (!Files.exists(dir))
             return;
+        List<String> failures = new ArrayList<>();
         try (Stream<Path> stream = Files.walk(dir)) {
             stream.sorted(Comparator.reverseOrder())
-                    .forEach(p -> {
+                    .forEach(path -> {
                         try {
-                            Files.delete(p);
+                            Files.delete(path);
                         } catch (IOException e) {
-                            /* 尽最大努力 */ }
+                            failures.add(path + " (" + e.getMessage() + ")"); }
                     });
         } catch (IOException e) {
-            /* 尽最大努力 */ }
+            failures.add(dir + " (walk error: " + e.getMessage() + ")"); }
+        if (!failures.isEmpty()) {
+            int show = Math.min(failures.size(), 5);
+            System.err.println("  [警告] 删除目录时 " + failures.size()
+                    + " 个文件无法删除 (前" + show + "个):");
+            for (int i = 0; i < show; i++)
+                System.err.println("    - " + failures.get(i));
+        }
     }
 
     /** 写入文本行到文件 */
@@ -94,11 +117,11 @@ public class Util {
         return Math.round(part * 1000.0 / total) / 10.0 + "%";
     }
 
-    public static String rpad(int n, int width) {
-        String s = String.valueOf(n);
-        while (s.length() < width)
-            s = " " + s;
-        return s;
+    public static String rpad(int value, int width) {
+        String padded = String.valueOf(value);
+        while (padded.length() < width)
+            padded = " " + padded;
+        return padded;
     }
 
     /** HTML 转义 */
@@ -157,12 +180,12 @@ public class Util {
         return sb.toString();
     }
 
-    public static int countCat(Map<String, String> catMap, String cat) {
-        int n = 0;
-        for (String v : catMap.values())
-            if (cat.equals(v))
-                n++;
-        return n;
+    public static int countCat(Map<String, String> catMap, String category) {
+        int count = 0;
+        for (String val : catMap.values())
+            if (category.equals(val))
+                count++;
+        return count;
     }
 
     /** com.example.Foo → com.example，无包名返回 "(默认包)" */
@@ -175,12 +198,17 @@ public class Util {
      * 资源文件文本归一化：每行内 \s+→单个空格 → trim → 删除空行。
      * 消除仅换行符/缩进/尾部空格导致的 SHA-256 假阳性。
      */
+    private static final java.util.regex.Pattern RE_RESOURCE_WHITESPACE =
+            java.util.regex.Pattern.compile("\\s+");
+    private static final java.util.regex.Pattern RE_RESOURCE_LINE =
+            java.util.regex.Pattern.compile("\\r?\\n");
+
     public static String normalizeResourceText(String text) {
         StringBuilder sb = new StringBuilder(text.length());
-        for (String line : text.split("\\r?\\n")) {
-            String t = line.replaceAll("\\s+", " ").trim();
-            if (!t.isEmpty())
-                sb.append(t).append('\n');
+        for (String line : RE_RESOURCE_LINE.split(text)) {
+            String collapsed = RE_RESOURCE_WHITESPACE.matcher(line).replaceAll(" ").trim();
+            if (!collapsed.isEmpty())
+                sb.append(collapsed).append('\n');
         }
         return sb.toString();
     }

@@ -12,6 +12,9 @@ import java.util.*;
  */
 public class Reporter {
 
+    private static final ThreadLocal<SimpleDateFormat> DATE_FORMAT =
+            ThreadLocal.withInitial(() -> new SimpleDateFormat("yyyy-MM-dd HH:mm:ss"));
+
     /** 从各阶段独立文件重建 类名→分类 映射 */
     public static Map<String, String> buildCategoryMap(Path reportDir) throws IOException {
         Map<String, String> map = new LinkedHashMap<>();
@@ -132,8 +135,8 @@ public class Reporter {
         csv.append('﻿'); // UTF-8 BOM
         csv.append("完整类名,包名,比对结果,备注\n");
 
-        for (Map.Entry<String, String> e : catMap.entrySet()) {
-            String name = e.getKey(), cat = e.getValue();
+        for (Map.Entry<String, String> entry : catMap.entrySet()) {
+            String name = entry.getKey(), cat = entry.getValue();
             boolean isResource = name.contains("/");
             String pkg, notes;
             if (isResource) {
@@ -171,9 +174,9 @@ public class Reporter {
         int logicalSame = sameFile + sameAsm + sameDec + aiOk;
 
         // ── 写 JS 详情数据文件 ──
-        for (Map.Entry<String, String> e : catMap.entrySet()) {
-            String name = e.getKey();
-            String cat = e.getValue();
+        for (Map.Entry<String, String> entry : catMap.entrySet()) {
+            String name = entry.getKey();
+            String cat = entry.getValue();
             boolean isResource = name.contains("/");
             if (!isResource && (Config.CAT_SAME_FILE.equals(cat) || Config.CAT_SAME_ASM.equals(cat)))
                 continue;
@@ -289,7 +292,7 @@ public class Reporter {
         h.append("</style>\n</head>\n<body>\n<div class=\"container\">\n");
         h.append("<h1>&#128270; Java产物比较报告</h1>\n");
         h.append("<p class=\"subtitle\">生成时间: ")
-                .append(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()))
+                .append(DATE_FORMAT.get().format(new Date()))
                 .append(" &nbsp;|&nbsp; 旧版: ").append(PhaseResults.oldCount).append(" 个")
                 .append(" &nbsp;|&nbsp; 新版: ").append(PhaseResults.newCount).append(" 个</p>\n");
 
@@ -364,8 +367,8 @@ public class Reporter {
         h.append("<th onclick=\"sortTable(2,'classTable')\">状态</th>");
         h.append("</tr></thead>\n<tbody>\n");
 
-        for (Map.Entry<String, String> e : catMap.entrySet()) {
-            appendTableRow(h, e.getKey(), e.getValue());
+        for (Map.Entry<String, String> entry : catMap.entrySet()) {
+            appendTableRow(h, entry.getKey(), entry.getValue());
         }
         h.append("</tbody></table>\n</div>\n</section>\n");
 
@@ -458,26 +461,26 @@ public class Reporter {
         h.append("<th onclick=\"sortTable(5,'pkgTbl')\">需人工</th>");
         h.append("</tr></thead>\n<tbody>\n");
         Map<String, int[]> stats = new TreeMap<>();
-        for (Map.Entry<String, String> e : catMap.entrySet()) {
-            String name = e.getKey(), cat = e.getValue();
+        for (Map.Entry<String, String> entry : catMap.entrySet()) {
+            String name = entry.getKey(), cat = entry.getValue();
             String path = name.contains("/") ? name : name.replace('.', '/');
             int idx = path.lastIndexOf('/');
             String group = idx > 0 ? path.substring(0, idx) : "(根目录)";
-            int[] c = stats.computeIfAbsent(group, k -> new int[5]);
-            int col = -1;
-            if (Config.CAT_SAME_FILE.equals(cat)) col = 0;
-            else if (Config.CAT_SAME_ASM.equals(cat)) col = 1;
-            else if (Config.CAT_SAME_DECOMPILED.equals(cat)) col = 2;
-            else if (Config.CAT_AI_VERIFIED.equals(cat)) col = 3;
-            else if (Config.CAT_DIFFERENT.equals(cat)) col = 4;
-            if (col >= 0) c[col]++;
+            int[] counts = stats.computeIfAbsent(group, k -> new int[5]);
+            int column = -1;
+            if (Config.CAT_SAME_FILE.equals(cat)) column = 0;
+            else if (Config.CAT_SAME_ASM.equals(cat)) column = 1;
+            else if (Config.CAT_SAME_DECOMPILED.equals(cat)) column = 2;
+            else if (Config.CAT_AI_VERIFIED.equals(cat)) column = 3;
+            else if (Config.CAT_DIFFERENT.equals(cat)) column = 4;
+            if (column >= 0) counts[column]++;
         }
-        for (Map.Entry<String, int[]> e : stats.entrySet()) {
-            int[] c = e.getValue();
+        for (Map.Entry<String, int[]> entry : stats.entrySet()) {
+            int[] counts = entry.getValue();
             h.append("<tr>");
-            h.append("<td style=\"font-size:12px\">").append(Util.esc(e.getKey())).append("</td>");
+            h.append("<td style=\"font-size:12px\">").append(Util.esc(entry.getKey())).append("</td>");
             for (int i = 0; i < 5; i++)
-                h.append("<td>").append(c[i]).append("</td>");
+                h.append("<td>").append(counts[i]).append("</td>");
             h.append("</tr>\n");
         }
         h.append("</tbody></table>\n</div>\n</section>\n");
@@ -680,12 +683,10 @@ public class Reporter {
                 .append("document.getElementById('diffAiBox').style.display='none';return}")
                 .append("if(d.match){document.getElementById('diffOldCol').innerHTML='<div style=\"display:flex;align-items:center;justify-content:center;height:100%;font-size:15px;color:#94a3b8;font-weight:600\">'+escHtml(d.match)+'</div>';")
                 .append("document.getElementById('diffNewCol').innerHTML='<div style=\"display:flex;align-items:center;justify-content:center;height:100%;font-size:15px;color:#94a3b8;font-weight:600\">—</div>';")
-                .append("document.getElementById('diffAiBox').textContent='';")
                 .append("document.getElementById('diffAiBox').style.display='none';")
                 .append("diffBlocks=[];document.getElementById('diffPos').textContent='-';return}")
                 .append("if(d.missing==='old'){document.getElementById('diffOldCol').innerHTML='<div style=\"display:flex;align-items:center;justify-content:center;height:100%;font-size:15px;color:#94a3b8;font-weight:600\">[ 新增 ]</div>';")
                 .append("document.getElementById('diffNewCol').innerHTML='<pre style=\"padding:8px 16px;font-family:inherit;font-size:13px;line-height:1.7;white-space:pre-wrap;word-break:break-all\">'+escHtml(d.new)+'</pre>';")
-                .append("document.getElementById('diffAiBox').textContent='';")
                 .append("document.getElementById('diffAiBox').style.display='none';")
                 .append("diffBlocks=[];document.getElementById('diffPos').textContent='-';return}")
                 .append("if(d.missing==='new'){document.getElementById('diffOldCol').innerHTML='<pre style=\"padding:8px 16px;font-family:inherit;font-size:13px;line-height:1.7;white-space:pre-wrap;word-break:break-all\">'+escHtml(d.old)+'</pre>';")
@@ -784,11 +785,12 @@ public class Reporter {
         Path newDir = Paths.get(Config.NEW_DIR);
         Map<String, Path> oldMap = Files.exists(oldDir) ? Util.scan(oldDir) : Collections.emptyMap();
         Map<String, Path> newMap = Files.exists(newDir) ? Util.scan(newDir) : Collections.emptyMap();
-        Map<String, Path> oldResMap = Files.exists(oldDir) ? scanResources(oldDir) : Collections.emptyMap();
-        Map<String, Path> newResMap = Files.exists(newDir) ? scanResources(newDir) : Collections.emptyMap();
+        Map<String, Path> oldResMap = Files.exists(oldDir) ? Util.scanResources(oldDir) : Collections.emptyMap();
+        Map<String, Path> newResMap = Files.exists(newDir) ? Util.scanResources(newDir) : Collections.emptyMap();
 
         // 从阶段报告文件中重建 ALL_CLASSES
         Set<String> allClasses = new TreeSet<>();
+        // 从阶段报告文件重建（主来源）
         allClasses.addAll(readClassNames(reportDir, "02-sha256-match.txt"));
         allClasses.addAll(readClassNames(reportDir, "02-sha256-diff.txt"));
         allClasses.addAll(readClassNames(reportDir, "02-sha256-error.txt"));
@@ -800,6 +802,9 @@ public class Reporter {
         allClasses.addAll(readClassNames(reportDir, "04-decompiled-error.txt"));
         allClasses.addAll(readClassNames(reportDir, "05-ai-match.txt"));
         allClasses.addAll(readClassNames(reportDir, "05-ai-diff.txt"));
+        // 兜底合并扫描结果，确保不会遗漏报告文件中未出现的类
+        allClasses.addAll(oldMap.keySet());
+        allClasses.addAll(newMap.keySet());
 
         // 计算 class 新增/删除
         int missingOld = 0, missingNew = 0;
@@ -853,27 +858,14 @@ public class Reporter {
                         + "文件名格式: 类名或资源路径扁平化后加 .ai.txt");
 
             // 抽查：列出 AI 目录前 5 个文件名，帮助排查命名匹配问题
-            try (java.util.stream.Stream<Path> s = Files.list(aiDir).limit(5)) {
+            try (java.util.stream.Stream<Path> stream = Files.list(aiDir).limit(5)) {
                 System.out.print("  前几个 AI 文件: ");
-                s.forEach(p -> System.out.print(p.getFileName() + "  "));
+                stream.forEach(path -> System.out.print(path.getFileName() + "  "));
                 System.out.println();
             }
         } else {
             System.out.println("  AI 日志目录不存在: " + aiDir);
         }
-    }
-
-    /** 扫描非 class 资源文件 */
-    private static Map<String, Path> scanResources(Path root) throws IOException {
-        Map<String, Path> map = new LinkedHashMap<>();
-        if (!Files.exists(root)) return map;
-        try (java.util.stream.Stream<Path> stream = Files.walk(root)) {
-            stream.filter(p -> Files.isRegularFile(p) && !p.toString().endsWith(".class")).forEach(x -> {
-                String name = root.relativize(x).toString().replace('\\', '/');
-                map.put(name, x);
-            });
-        }
-        return map;
     }
 
     private static Set<String> readClassNames(Path reportDir, String fileName) throws IOException {
@@ -882,9 +874,9 @@ public class Reporter {
             return Collections.emptySet();
         Set<String> set = new LinkedHashSet<>();
         for (String line : Files.readAllLines(file, StandardCharsets.UTF_8)) {
-            String t = line.trim();
-            if (!t.isEmpty())
-                set.add(t);
+            String trimmed = line.trim();
+            if (!trimmed.isEmpty())
+                set.add(trimmed);
         }
         return set;
     }

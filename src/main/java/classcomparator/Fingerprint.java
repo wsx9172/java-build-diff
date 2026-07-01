@@ -89,41 +89,53 @@ public class Fingerprint {
 
     static void appendInstructions(StringBuilder builder, MethodNode method) {
         for (int i = 0; i < method.instructions.size(); i++) {
-            AbstractInsnNode insn = (AbstractInsnNode) method.instructions.get(i);
-            if (insn instanceof LabelNode || insn instanceof FrameNode || insn instanceof LineNumberNode)
+            AbstractInsnNode instruction = (AbstractInsnNode) method.instructions.get(i);
+            if (instruction instanceof LabelNode || instruction instanceof FrameNode
+                    || instruction instanceof LineNumberNode)
                 continue;
 
-            builder.append(insn.getOpcode());
+            builder.append(instruction.getOpcode());
 
-            if (insn instanceof MethodInsnNode) {
-                MethodInsnNode x = (MethodInsnNode) insn;
-                builder.append('|').append(x.owner).append('|').append(x.name).append('|').append(x.desc);
-            } else if (insn instanceof FieldInsnNode) {
-                FieldInsnNode x = (FieldInsnNode) insn;
-                builder.append('|').append(x.owner).append('|').append(x.name).append('|').append(x.desc);
-            } else if (insn instanceof TypeInsnNode) {
-                builder.append('|').append(((TypeInsnNode) insn).desc);
-            } else if (insn instanceof LdcInsnNode) {
-                builder.append('|').append(String.valueOf(((LdcInsnNode) insn).cst));
-            } else if (insn instanceof IntInsnNode) {
-                builder.append('|').append(((IntInsnNode) insn).operand);
-            } else if (insn instanceof VarInsnNode) {
+            if (instruction instanceof MethodInsnNode) {
+                MethodInsnNode methodNode = (MethodInsnNode) instruction;
+                builder.append('|').append(methodNode.owner).append('|')
+                        .append(methodNode.name).append('|').append(methodNode.desc);
+            } else if (instruction instanceof FieldInsnNode) {
+                FieldInsnNode fieldNode = (FieldInsnNode) instruction;
+                builder.append('|').append(fieldNode.owner).append('|')
+                        .append(fieldNode.name).append('|').append(fieldNode.desc);
+            } else if (instruction instanceof TypeInsnNode) {
+                builder.append('|').append(((TypeInsnNode) instruction).desc);
+            } else if (instruction instanceof LdcInsnNode) {
+                Object constant = ((LdcInsnNode) instruction).cst;
+                if (constant instanceof org.objectweb.asm.Type) {
+                    builder.append('|').append(((org.objectweb.asm.Type) constant).getDescriptor());
+                } else if (constant instanceof org.objectweb.asm.Handle) {
+                    org.objectweb.asm.Handle handle = (org.objectweb.asm.Handle) constant;
+                    builder.append('|').append(handle.getOwner()).append('|')
+                            .append(handle.getName()).append('|').append(handle.getDesc());
+                } else {
+                    builder.append('|').append(String.valueOf(constant));
+                }
+            } else if (instruction instanceof IntInsnNode) {
+                builder.append('|').append(((IntInsnNode) instruction).operand);
+            } else if (instruction instanceof VarInsnNode) {
                 // 不记录 var 槽位号 —— 不同 JDK 分配策略不同
-            } else if (insn instanceof IincInsnNode) {
-                IincInsnNode x = (IincInsnNode) insn;
-                builder.append('|').append(x.incr);
-            } else if (insn instanceof InvokeDynamicInsnNode) {
-                InvokeDynamicInsnNode x = (InvokeDynamicInsnNode) insn;
-                builder.append('|').append(x.name).append('|').append(x.desc);
-            } else if (insn instanceof JumpInsnNode) {
+            } else if (instruction instanceof IincInsnNode) {
+                IincInsnNode iincNode = (IincInsnNode) instruction;
+                builder.append('|').append(iincNode.incr);
+            } else if (instruction instanceof InvokeDynamicInsnNode) {
+                InvokeDynamicInsnNode indyNode = (InvokeDynamicInsnNode) instruction;
+                builder.append('|').append(indyNode.name).append('|').append(indyNode.desc);
+            } else if (instruction instanceof JumpInsnNode) {
                 builder.append("|JUMP");
-            } else if (insn instanceof LookupSwitchInsnNode) {
-                List<Integer> sortedKeys = new ArrayList<>(((LookupSwitchInsnNode) insn).keys);
+            } else if (instruction instanceof LookupSwitchInsnNode) {
+                List<Integer> sortedKeys = new ArrayList<>(((LookupSwitchInsnNode) instruction).keys);
                 Collections.sort(sortedKeys);
                 builder.append("|LOOKUPSWITCH|").append(sortedKeys);
-            } else if (insn instanceof TableSwitchInsnNode) {
-                TableSwitchInsnNode x = (TableSwitchInsnNode) insn;
-                builder.append("|TABLESWITCH|").append(x.min).append('|').append(x.max);
+            } else if (instruction instanceof TableSwitchInsnNode) {
+                TableSwitchInsnNode switchNode = (TableSwitchInsnNode) instruction;
+                builder.append("|TABLESWITCH|").append(switchNode.min).append('|').append(switchNode.max);
             }
             builder.append('\n');
         }
@@ -163,22 +175,22 @@ public class Fingerprint {
         sb.append("【方法级差异定位】以下方法在字节码层面存在差异（其他方法已确认为完全相同）：\n");
         if (!changed.isEmpty()) {
             sb.append("  变更方法: ");
-            for (String m : changed)
-                sb.append(m).append(", ");
+            for (String methodSig : changed)
+                sb.append(methodSig).append(", ");
             sb.setLength(sb.length() - 2);
             sb.append('\n');
         }
         if (!added.isEmpty()) {
             sb.append("  新增方法: ");
-            for (String m : added)
-                sb.append(m).append(", ");
+            for (String methodSig : added)
+                sb.append(methodSig).append(", ");
             sb.setLength(sb.length() - 2);
             sb.append('\n');
         }
         if (!removed.isEmpty()) {
             sb.append("  删除方法: ");
-            for (String m : removed)
-                sb.append(m).append(", ");
+            for (String methodSig : removed)
+                sb.append(methodSig).append(", ");
             sb.setLength(sb.length() - 2);
             sb.append('\n');
         }

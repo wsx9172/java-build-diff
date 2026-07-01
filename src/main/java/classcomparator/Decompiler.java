@@ -72,15 +72,21 @@ public class Decompiler {
 
     /** Procyon 反编译器 —— 需全局锁串行调用。 */
     public static String decompileProcyon(Path classFile) {
-        StringWriter writer = new StringWriter();
-        DecompilerSettings settings = DecompilerSettings.javaDefaults();
-        settings.setForceExplicitImports(true);
-        settings.setFlattenSwitchBlocks(true);
-        synchronized (PhaseResults.PROCYON_LOCK) {
-            com.strobel.decompiler.Decompiler.decompile(classFile.toAbsolutePath().toString(),
-                    new PlainTextOutput(writer), settings);
+        try {
+            StringWriter writer = new StringWriter();
+            DecompilerSettings settings = DecompilerSettings.javaDefaults();
+            settings.setForceExplicitImports(true);
+            settings.setFlattenSwitchBlocks(true);
+            synchronized (PhaseResults.PROCYON_LOCK) {
+                com.strobel.decompiler.Decompiler.decompile(classFile.toAbsolutePath().toString(),
+                        new PlainTextOutput(writer), settings);
+            }
+            return writer.toString();
+        } catch (Exception e) {
+            System.err.println("  [Procyon] " + classFile.getFileName() + " -> "
+                    + e.getClass().getSimpleName() + ": " + e.getMessage());
+            return "";
         }
-        return writer.toString();
     }
 
     // ── 源码归一化正则（预编译）──
@@ -110,10 +116,11 @@ public class Decompiler {
         source = RE_ENUM_VALUEOF.matcher(source).replaceAll("");
         StringBuilder result = new StringBuilder();
         for (String line : RE_LINE_SPLIT.split(source)) {
-            String t = line.trim();
-            if (t.isEmpty() || t.startsWith("package ") || t.startsWith("import "))
+            String collapsed = line.trim();
+            if (collapsed.isEmpty() || collapsed.startsWith("package ")
+                    || collapsed.startsWith("import "))
                 continue;
-            result.append(RE_WHITESPACE.matcher(t).replaceAll(" ")).append('\n');
+            result.append(RE_WHITESPACE.matcher(collapsed).replaceAll(" ")).append('\n');
         }
         return result.toString();
     }

@@ -75,8 +75,9 @@ public class JavaBuildDiff {
                 } else if (!PhaseResults.newMap.containsKey(cls)) {
                     missingNewList.add(cls);
                     PhaseResults.missingNew++;
-                } else
+                } else {
                     candidates.add(cls);
+                }
             }
             System.out.println("  候选 " + candidates.size() + "  |  新增 "
                     + PhaseResults.missingOld + "  |  删除 " + PhaseResults.missingNew + "\n");
@@ -118,19 +119,6 @@ public class JavaBuildDiff {
     // Phase 1 — 非 class 资源文件 SHA-256 比对
     // ═══════════════════════════════════════════════════════════
 
-    static Map<String, Path> scanResources(Path root) throws IOException {
-        Map<String, Path> map = new LinkedHashMap<>();
-        if (!Files.exists(root))
-            return map;
-        try (java.util.stream.Stream<Path> stream = Files.walk(root)) {
-            stream.filter(p -> Files.isRegularFile(p) && !p.toString().endsWith(".class")).forEach(x -> {
-                String name = root.relativize(x).toString().replace('\\', '/');
-                map.put(name, x);
-            });
-        }
-        return map;
-    }
-
     static void writeResourceDiff(Path file, String name, Path oldFile, Path newFile) throws IOException {
         StringBuilder b = new StringBuilder();
         b.append("=== 资源: ").append(name).append(" ===\n\n");
@@ -154,8 +142,8 @@ public class JavaBuildDiff {
     }
 
     static List<String> runPhase1(Path reportDir) throws Exception {
-        PhaseResults.oldResMap = scanResources(Paths.get(Config.OLD_DIR));
-        PhaseResults.newResMap = scanResources(Paths.get(Config.NEW_DIR));
+        PhaseResults.oldResMap = Util.scanResources(Paths.get(Config.OLD_DIR));
+        PhaseResults.newResMap = Util.scanResources(Paths.get(Config.NEW_DIR));
 
         Set<String> allRes = new TreeSet<>();
         allRes.addAll(PhaseResults.oldResMap.keySet());
@@ -439,7 +427,7 @@ public class JavaBuildDiff {
         if (!finished) {
             executor.shutdownNow();
             System.out.print("                                          \r");
-            System.out.println("  [警告] 反编译超时(" + Config.DECOMPILE_TIMEOUT_MINUTES + "分钟)！");
+            System.out.println("  [警告] 反编译超时(" + Config.DECOMPILE_TIMEOUT_MINUTES + "分钟)！未完成任务已取消。");
         }
 
         if (!failedClasses.isEmpty()) {
@@ -462,16 +450,25 @@ public class JavaBuildDiff {
         List<String> sameList = new ArrayList<>();
         List<String> diffList = new ArrayList<>();
         List<String> errorList = new ArrayList<>();
+        int timeoutSkipped = 0;
         for (String className : candidates) {
-            String r = results.get(className);
-            if (Config.CAT_SAME_DECOMPILED.equals(r)) {
+            String category = results.get(className);
+            if (Config.CAT_SAME_DECOMPILED.equals(category)) {
                 sameList.add(className);
-            } else if (Config.CAT_ERROR.equals(r)) {
+            } else if (Config.CAT_ERROR.equals(category)) {
                 diffList.add(className);
                 errorList.add(className);
+            } else if (category == null) {
+                // 超时后 shutdownNow() 清空了等待队列，该任务从未执行
+                diffList.add(className);
+                errorList.add(className);
+                timeoutSkipped++;
             } else {
                 diffList.add(className);
             }
+        }
+        if (timeoutSkipped > 0) {
+            System.out.println("  [警告] " + timeoutSkipped + " 个类因超时未处理，已归入差异列表。建议增加线程数或延长超时。");
         }
 
         PhaseResults.phase4Match = sameList.size();
@@ -597,6 +594,7 @@ public class JavaBuildDiff {
         AtomicInteger completedCount = new AtomicInteger(0);
         AtomicInteger verifiedCount = new AtomicInteger(0);
         AtomicInteger differentCount = new AtomicInteger(0);
+        AtomicInteger interruptSkipCount = new AtomicInteger(0);
         int totalPending = pendingList.size();
         int counterWidth = String.valueOf(totalPending).length();
         String rowFmt = "  [%0" + counterWidth + "d/%d] %-50s %s\n";
@@ -614,6 +612,9 @@ public class JavaBuildDiff {
                         concurrencySemaphore.acquire();
                     } catch (InterruptedException interrupted) {
                         Thread.currentThread().interrupt();
+                        interruptSkipCount.set(pendingList.size() - allFutures.size());
+                        System.out.println("  [警告] 主线程被中断，已跳过 " + interruptSkipCount.get()
+                                + " 个待审查项。");
                         break;
                     }
 
@@ -785,6 +786,7 @@ public class JavaBuildDiff {
 
         long elapsed = (System.currentTimeMillis() - startTime) / 1000;
         System.out.println("  -> 本次: 一致 " + verifiedCount + "  不同 " + differentCount
+                + (interruptSkipCount.get() > 0 ? "  跳过 " + interruptSkipCount.get() : "")
                 + "  |  累计 AI一致 " + PhaseResults.phase5Match
                 + "  仍需人工 " + PhaseResults.phase5Diff
                 + "  |  " + elapsed + "s\n");

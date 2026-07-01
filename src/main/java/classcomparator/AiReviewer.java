@@ -48,9 +48,16 @@ public class AiReviewer {
         String cacheKey;
 
         if (isResource) {
-            oldPrepared = oldContent;
-            newPrepared = newContent;
-            cacheKey = Util.sha256((oldContent + "\0" + newContent).getBytes(StandardCharsets.UTF_8));
+            // 对文本资源做归一化以消除仅空白差异的重复 AI 请求
+            if (Util.isText(oldContent.getBytes(StandardCharsets.UTF_8))
+                    && Util.isText(newContent.getBytes(StandardCharsets.UTF_8))) {
+                oldPrepared = Util.normalizeResourceText(oldContent);
+                newPrepared = Util.normalizeResourceText(newContent);
+            } else {
+                oldPrepared = oldContent;
+                newPrepared = newContent;
+            }
+            cacheKey = Util.sha256((oldPrepared + "\0" + newPrepared).getBytes(StandardCharsets.UTF_8));
             String cached = PhaseResults.AI_RESULT_CACHE.get(cacheKey);
             if (cached != null)
                 return CompletableFuture.completedFuture(cached);
