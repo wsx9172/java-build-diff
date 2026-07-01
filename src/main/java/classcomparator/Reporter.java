@@ -602,7 +602,7 @@ public class Reporter {
         h.append("#diffLabels span{flex:1;padding:7px 16px;font-size:12px;color:#64748b;text-align:center;font-weight:600}\n");
         h.append("#diffLabels span+span{border-left:1px solid #e5e7eb}\n");
         h.append("#diffContent{flex:1;display:flex;overflow:hidden}\n");
-        h.append("#diffContent>div{flex:1;overflow:auto;font-family:'SF Mono','Cascadia Code',Consolas,monospace;font-size:12px;line-height:1.6}\n");
+        h.append("#diffContent>div{flex:1;overflow:auto;min-height:0;font-family:'SF Mono','Cascadia Code',Consolas,monospace;font-size:12px;line-height:1.6}\n");
         h.append("#diffContent>div+div{border-left:1px solid #e5e7eb}\n");
         h.append(".diff-row{display:flex;min-height:1.45em}\n");
         h.append(".diff-row .ln{display:inline-block;min-width:42px;padding:0 8px 0 4px;text-align:right;color:#94a3b8;user-select:none;flex-shrink:0}\n");
@@ -652,25 +652,17 @@ public class Reporter {
                 .append("if(blank){if(!prev)out.push('');prev=true}")
                 .append("else{out.push(lines[i]);prev=false}}")
                 .append("return out}\n");
-        h.append("function computeDiff(oldLines,newLines){")
-                .append("var m={},oIdx=[],nIdx=[];")
-                .append("for(var i=0;i<oldLines.length;i++){var k=oldLines[i];if(!m[k])m[k]=[];m[k].push(i)}")
-                .append("var pairs=[];")
-                .append("for(var j=0;j<newLines.length;j++){")
-                .append("var arr=m[newLines[j]];")
-                .append("if(arr&&arr.length>0){var oi=arr.shift();pairs.push({o:oi,n:j})}}")
-                .append("pairs.sort(function(a,b){return a.o-b.o});")
-                .append("var oSet={},nSet={};")
-                .append("for(var i=0;i<pairs.length;i++){oSet[pairs[i].o]=pairs[i].n;nSet[pairs[i].n]=pairs[i].o}")
-                .append("var rows=[];var oi=0,ni=0;")
-                .append("while(oi<oldLines.length||ni<newLines.length){")
-                .append("if(oi>=oldLines.length){rows.push({o:-1,n:ni,ol:'',nl:newLines[ni],type:'added'});ni++")
-                .append("}else if(ni>=newLines.length){rows.push({o:oi,n:-1,ol:oldLines[oi],nl:'',type:'removed'});oi++")
-                .append("}else if(oSet[oi]!==undefined&&oSet[oi]===ni){rows.push({o:oi,n:ni,ol:oldLines[oi],nl:newLines[ni],type:'equal'});oi++;ni++")
-                .append("}else if(oSet[oi]!==undefined&&oSet[oi]>ni){rows.push({o:-1,n:ni,ol:'',nl:newLines[ni],type:'added'});ni++")
-                .append("}else if(nSet[ni]!==undefined&&nSet[ni]>oi){rows.push({o:oi,n:-1,ol:oldLines[oi],nl:'',type:'removed'});oi++")
-                .append("}else{rows.push({o:oi,n:ni,ol:oldLines[oi],nl:newLines[ni],type:'modified'});oi++;ni++")
-                .append("}}return rows}\n");
+        h.append("function computeDiff(O,N){")
+                .append("var o=O.length,n=N.length;")
+                .append("var dp=[];for(var i=0;i<=o;i++){dp[i]=[];for(var j=0;j<=n;j++)dp[i][j]=0}")
+                .append("for(var i=1;i<=o;i++)for(var j=1;j<=n;j++)")
+                .append("dp[i][j]=O[i-1]===N[j-1]?dp[i-1][j-1]+1:Math.max(dp[i-1][j],dp[i][j-1]);")
+                .append("var R=[],i=o,j=n;")
+                .append("while(i>0||j>0){")
+                .append("if(i>0&&j>0&&O[i-1]===N[j-1]){R.unshift({o:i-1,n:j-1,ol:O[i-1],nl:N[j-1],type:'equal'});i--;j--}")
+                .append("else if(j>0&&(i===0||dp[i][j-1]>=dp[i-1][j])){R.unshift({o:-1,n:j-1,ol:'',nl:N[j-1],type:'added'});j--}")
+                .append("else{R.unshift({o:i-1,n:-1,ol:O[i-1],nl:'',type:'removed'});i--}")
+                .append("}return R}\n");
         h.append("function inlineDiff(os,ns){")
                 .append("var i=0,olen=os.length,nlen=ns.length;")
                 .append("while(i<olen&&i<nlen&&os[i]===ns[i])i++;")
@@ -707,8 +699,8 @@ public class Reporter {
                 .append("if(d.ai){aiBody.textContent=d.ai;aiBox.classList.remove('collapsed');")
                 .append("aiToggle.textContent='▾ 收起';aiBox.style.display='block'}")
                 .append("else{aiBox.style.display='none'}")
-                .append("var oldLines=collapseBlanks(d.old.split('\\n'));")
-                .append("var newLines=collapseBlanks(d.new.split('\\n'));")
+                .append("var oldLines=collapseBlanks(d.old.replace(/\\r/g,'').split('\\n'));")
+                .append("var newLines=collapseBlanks(d.new.replace(/\\r/g,'').split('\\n'));")
                 .append("var rows=computeDiff(oldLines,newLines);")
                 .append("diffBlocks=[];var ohtml='',nhtml='';")
                 .append("for(var r=0;r<rows.length;r++){var row=rows[r];")
@@ -751,7 +743,7 @@ public class Reporter {
                 .append("var drs=document.querySelectorAll('.diff-row[data-dr=\"'+r+'\"]');")
                 .append("for(var di=0;di<drs.length;di++)drs[di].classList.add('highlight')}")
                 .append("var first=document.querySelector('.diff-row[data-dr=\"'+block.start+'\"]');")
-                .append("if(first){first.scrollIntoView({block:'center',behavior:'smooth'})}")
+                .append("if(first){var c=document.getElementById('diffOldCol');c.scrollTop=first.getBoundingClientRect().top-c.getBoundingClientRect().top+c.scrollTop-c.clientHeight/2}")
                 .append("document.getElementById('diffPos').textContent='差异 '+(currentDiffIdx+1)+'/'+diffBlocks.length}\n");
         h.append("function syncScroll(src){")
                 .append("var oldCol=document.getElementById('diffOldCol');")
