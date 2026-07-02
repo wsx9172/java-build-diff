@@ -404,7 +404,7 @@ public class Reporter {
         h.append("</div>");
         h.append("<button onclick=\"closeDiff()\">&#10005; 关闭</button>");
         h.append("</div><div id=\"diffAiBox\"><div id=\"diffAiHeader\" onclick=\"toggleAiBox()\"><span id=\"diffAiTitle\">AI 报告</span><button id=\"diffAiToggle\">▾ 收起</button></div><div id=\"diffAiBody\"></div></div>");
-        h.append("<div id=\"diffLabels\"><span>旧版</span><span>新版</span></div>");
+        h.append("<div id=\"diffLabels\"><span>旧版 <button class=\"copy-btn\" onclick=\"copyColumn('diffOldCol',this)\" title=\"复制旧版全部内容\">&#128203;</button></span><span>新版 <button class=\"copy-btn\" onclick=\"copyColumn('diffNewCol',this)\" title=\"复制新版全部内容\">&#128203;</button></span></div>");
         h.append("<div id=\"diffContent\"><div id=\"diffOldCol\"></div><div id=\"diffNewCol\"></div></div>");
         h.append("</div>\n");
 
@@ -630,8 +630,10 @@ public class Reporter {
         h.append(".ai-tbl tr:hover td{background:#fef3c7}\n");
         h.append(".diff-row.ai-match{box-shadow:inset 3px 0 0 #f59e0b;background:rgba(245,158,11,.08)}\n");
         h.append("#diffLabels{display:flex;background:#f1f5f9;border-bottom:1px solid #e5e7eb}\n");
-        h.append("#diffLabels span{flex:1;padding:7px 16px;font-size:12px;color:#64748b;text-align:center;font-weight:600}\n");
-        h.append("#diffLabels span+span{border-left:1px solid #e5e7eb}\n");
+        h.append("#diffLabels>span{flex:1;padding:5px 16px;font-size:12px;color:#64748b;text-align:center;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px}\n");
+        h.append("#diffLabels>span+span{border-left:1px solid #e5e7eb}\n");
+        h.append(".copy-btn{background:none;border:1px solid #d1d5db;border-radius:4px;padding:1px 6px;font-size:11px;cursor:pointer;color:#64748b;line-height:1.4}\n");
+        h.append(".copy-btn:hover{background:#e5e7eb;color:#374151}\n");
         h.append("#diffContent{flex:1;display:flex;overflow:hidden}\n");
         h.append("#diffOldCol,#diffNewCol{flex:1;overflow-y:auto;min-height:0;font-family:'SF Mono','Cascadia Code',Consolas,monospace;font-size:12px;line-height:1.6}\n");
         h.append("#diffNewCol{border-left:1px solid #e5e7eb}\n");
@@ -791,6 +793,17 @@ public class Reporter {
                 .append("var t=document.getElementById('diffAiToggle');")
                 .append("if(b.classList.contains('collapsed')){b.classList.remove('collapsed');t.textContent='▾ 收起'}")
                 .append("else{b.classList.add('collapsed');t.textContent='▸ 展开'}}\n");
+        h.append("function copyColumn(colId,btn){")
+                .append("var el=document.getElementById(colId);")
+                .append("if(!el)return;")
+                .append("var rows=el.querySelectorAll('.diff-row');")
+                .append("var lines=[];")
+                .append("for(var i=0;i<rows.length;i++){")
+                .append("var code=rows[i].querySelector('.code');")
+                .append("if(code)lines.push(code.textContent||'')}")
+                .append("navigator.clipboard.writeText(lines.join('\\n')).then(function(){")
+                .append("btn.textContent='✓';")
+                .append("setTimeout(function(){btn.innerHTML='&#128203;'},1500)})}\n");
         h.append("function closeDiff(){var prev=document.querySelectorAll('.diff-row.ai-match');")
                 .append("for(var pi=0;pi<prev.length;pi++)prev[pi].classList.remove('ai-match');")
                 .append("document.getElementById('diffPanel').classList.remove('show');")
