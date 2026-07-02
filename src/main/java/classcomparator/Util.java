@@ -188,12 +188,6 @@ public class Util {
         return count;
     }
 
-    /** com.example.Foo → com.example，无包名返回 "(默认包)" */
-    public static String extractPackage(String className) {
-        int idx = className.lastIndexOf('.');
-        return idx > 0 ? className.substring(0, idx) : "(默认包)";
-    }
-
     /**
      * 资源文件文本归一化：每行内 \s+→单个空格 → trim → 删除空行。
      * 消除仅换行符/缩进/尾部空格导致的 SHA-256 假阳性。

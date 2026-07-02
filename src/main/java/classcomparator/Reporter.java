@@ -127,30 +127,49 @@ public class Reporter {
                 s.toString().getBytes(StandardCharsets.UTF_8));
     }
 
+    /** 将内置分类标签映射为 HTML 下拉框中使用的显示名称 */
+    private static String toDisplayCategory(String cat) {
+        switch (cat) {
+            case Config.CAT_SAME_FILE:       return "SHA-256一致";
+            case Config.CAT_SAME_ASM:        return "ASM指纹一致";
+            case Config.CAT_SAME_DECOMPILED: return "反编译一致";
+            case Config.CAT_AI_VERIFIED:     return "AI验证";
+            case Config.CAT_DIFFERENT:       return "需人工";
+            case Config.CAT_ERROR:           return "工具异常";
+            case Config.CAT_MISSING_OLD:     return "新增";
+            case Config.CAT_MISSING_NEW:     return "删除";
+            default:                         return cat;
+        }
+    }
+
     /** 生成 report.csv */
     public static void generateCsvReport(Path reportDir) throws IOException {
         Map<String, String> catMap = buildCategoryMap(reportDir);
 
         StringBuilder csv = new StringBuilder();
         csv.append('﻿'); // UTF-8 BOM
-        csv.append("完整类名,包名,比对结果,备注\n");
+        csv.append("文件名,目录,比对结果,备注\n");
 
         for (Map.Entry<String, String> entry : catMap.entrySet()) {
-            String name = entry.getKey(), cat = entry.getValue();
-            boolean isResource = name.contains("/");
-            String pkg, notes;
+            String fullName = entry.getKey(), cat = entry.getValue();
+            boolean isResource = fullName.contains("/");
+            String shortName, directory, notes;
             if (isResource) {
-                int idx = name.lastIndexOf('/');
-                pkg = idx > 0 ? name.substring(0, idx) : "(根目录)";
-                notes = Config.CAT_DIFFERENT.equals(cat) && isResource
-                        ? "详见 details/" + Util.toResFileName(name) : "";
+                int idx = fullName.lastIndexOf('/');
+                shortName = idx >= 0 ? fullName.substring(idx + 1) : fullName;
+                directory = idx > 0 ? fullName.substring(0, idx) : "(根目录)";
+                notes = Config.CAT_DIFFERENT.equals(cat)
+                        ? "详见 details/" + Util.toResFileName(fullName) : "";
             } else {
-                pkg = Util.extractPackage(name);
-                notes = Config.CAT_DIFFERENT.equals(cat) ? "详见 details/" + Util.toFileName(name) : "";
+                int idx = fullName.lastIndexOf('.');
+                shortName = (idx >= 0 ? fullName.substring(idx + 1) : fullName) + ".java";
+                directory = idx > 0 ? fullName.substring(0, idx).replace('.', '/') : "(根目录)";
+                notes = Config.CAT_DIFFERENT.equals(cat)
+                        ? "详见 details/" + Util.toFileName(fullName) : "";
             }
-            csv.append(Util.escapeCsv(name)).append(',')
-                    .append(Util.escapeCsv(pkg)).append(',')
-                    .append(Util.escapeCsv(cat)).append(',')
+            csv.append(Util.escapeCsv(shortName)).append(',')
+                    .append(Util.escapeCsv(directory)).append(',')
+                    .append(Util.escapeCsv(toDisplayCategory(cat))).append(',')
                     .append(Util.escapeCsv(notes)).append('\n');
         }
 
