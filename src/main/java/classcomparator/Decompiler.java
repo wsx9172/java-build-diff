@@ -55,6 +55,7 @@ public class Decompiler {
             cfrOptions.put("hidelangimports", "true");
             cfrOptions.put("hideutf", "false");
             cfrOptions.put("showversion", "false");
+            cfrOptions.put("recovertypeclash", "true");
 
             CfrDriver driver = new CfrDriver.Builder()
                     .withOutputSink(sinkFactory)
@@ -62,7 +63,7 @@ public class Decompiler {
                     .build();
             driver.analyse(Collections.singletonList(
                     classFile.toAbsolutePath().toString()));
-            return result.toString();
+            return fixRawTypes(result.toString());
         } catch (Exception e) {
             System.err.println("  [CFR] " + classFile.getFileName() + " -> "
                     + e.getClass().getSimpleName() + ": " + e.getMessage());
@@ -81,12 +82,110 @@ public class Decompiler {
                 com.strobel.decompiler.Decompiler.decompile(classFile.toAbsolutePath().toString(),
                         new PlainTextOutput(writer), settings);
             }
-            return writer.toString();
+            return fixRawTypes(writer.toString());
         } catch (Exception e) {
             System.err.println("  [Procyon] " + classFile.getFileName() + " -> "
                     + e.getClass().getSimpleName() + ": " + e.getMessage());
             return "";
         }
+    }
+
+    // ── 原始类型修复正则（预编译）──
+
+    /** 增强 for 循环：for (ElementType var : iterableVar) —— 用于反向推断泛型 */
+    static final Pattern RE_FOREACH = Pattern.compile(
+            "for\\s*\\(\\s*((?:[\\w$.]+)(?:<[^>]*>)?)\\s+\\w+\\s*:\\s*([a-z]\\w*)\\s*\\)");
+
+    /** Map.Entry<K, V> 的泛型参数提取 */
+    static final Pattern RE_MAP_ENTRY = Pattern.compile(
+            "Map\\.Entry<([^,>]+),\\s*([^>]+)>");
+
+    /** 单参数集合类型（关键字顺序：先长后短，避免 SortedSet 被 Set 部分匹配） */
+    static final String[] SINGLE_PARAM_TYPES = {
+            "ConcurrentLinkedDeque", "ConcurrentLinkedQueue", "LinkedBlockingDeque",
+            "LinkedBlockingQueue", "ArrayBlockingQueue", "LinkedHashSet",
+            "LinkedTransferQueue", "PriorityBlockingQueue", "ConcurrentSkipListSet",
+            "CopyOnWriteArraySet", "CopyOnWriteArrayList", "DelayQueue",
+            "SynchronousQueue", "LinkedHashMap", "ConcurrentHashMap",
+            "PriorityQueue", "TreeSet", "HashSet", "Vector", "Stream",
+            "ArrayList", "LinkedList", "Iterable", "Iterator",
+            "Collection", "Enumeration", "NavigableSet", "SortedSet",
+            "BlockingDeque", "BlockingQueue", "TransferQueue",
+            "Deque", "Queue", "Stack", "List", "Set"
+    };
+
+    /** Map 类型（第一个出现的是具体类型，替换优先级更高） */
+    static final String[] MAP_TYPES = {
+            "ConcurrentNavigableMap", "ConcurrentSkipListMap", "ConcurrentHashMap",
+            "LinkedHashMap", "IdentityHashMap", "WeakHashMap",
+            "NavigableMap", "SortedMap", "TreeMap", "Hashtable", "HashMap", "Map"
+    };
+
+    /**
+     * 后处理反编译源码，修复因类型擦除导致的原始类型声明。
+     *
+     * <p>问题：JVM 泛型擦除后字节码中无 {@code List<String>}，CFR 将其还原为原始类型
+     * {@code List}，在 IDE 中引发 raw-type 错误。</p>
+     *
+     * <p>修复：扫描增强 for 循环的元素类型（如 {@code for (String s : list)}），
+     * 反向推断集合变量的泛型参数，将 {@code List list} 替换为 {@code List<String> list}。
+     * 同时对数据类中的 Map 变量（迭代元素为 {@code Map.Entry<K,V>}）提取键值类型。</p>
+     */
+    public static String fixRawTypes(String source) {
+        if (source == null || source.isEmpty())
+            return source;
+
+        // Step 1 — 扫描所有增强 for 循环，建立 变量名→泛型参数 映射
+        Map<String, String> singleTypeFixes = new LinkedHashMap<>();
+        Map<String, String> mapTypeFixes = new LinkedHashMap<>();
+
+        java.util.regex.Matcher forEachMatcher = RE_FOREACH.matcher(source);
+        while (forEachMatcher.find()) {
+            String elementType = forEachMatcher.group(1);
+            String iterableVariable = forEachMatcher.group(2);
+
+            if (singleTypeFixes.containsKey(iterableVariable)
+                    || mapTypeFixes.containsKey(iterableVariable))
+                continue;
+
+            if (elementType.startsWith("Map.") && elementType.contains("Entry")) {
+                java.util.regex.Matcher entryMatcher = RE_MAP_ENTRY.matcher(elementType);
+                if (entryMatcher.find()) {
+                    mapTypeFixes.put(iterableVariable,
+                            entryMatcher.group(1).trim() + ", " + entryMatcher.group(2).trim());
+                }
+            } else {
+                singleTypeFixes.put(iterableVariable, elementType);
+            }
+        }
+
+        if (singleTypeFixes.isEmpty() && mapTypeFixes.isEmpty())
+            return source;
+
+        // Step 2 — 修复单参数集合类型（List<E>, Set<E> 等）
+        for (Map.Entry<String, String> mapping : singleTypeFixes.entrySet()) {
+            String variableName = mapping.getKey();
+            String genericParam = mapping.getValue();
+            for (String rawTypeName : SINGLE_PARAM_TYPES) {
+                // 仅匹配原始类型（后面不跟 < 表示未参数化）
+                source = source.replaceAll(
+                        "\\b" + rawTypeName + "\\s+" + variableName + "\\b(?!\\s*<)",
+                        rawTypeName + "<" + genericParam + "> " + variableName);
+            }
+        }
+
+        // Step 3 — 修复 Map 类型（Map<K,V>, HashMap<K,V> 等）
+        for (Map.Entry<String, String> mapping : mapTypeFixes.entrySet()) {
+            String variableName = mapping.getKey();
+            String genericParams = mapping.getValue();
+            for (String rawTypeName : MAP_TYPES) {
+                source = source.replaceAll(
+                        "\\b" + rawTypeName + "\\s+" + variableName + "\\b(?!\\s*<)",
+                        rawTypeName + "<" + genericParams + "> " + variableName);
+            }
+        }
+
+        return source;
     }
 
     // ── 源码归一化正则（预编译）──
