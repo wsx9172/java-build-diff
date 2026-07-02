@@ -403,7 +403,7 @@ public class Reporter {
         h.append("<button onclick=\"nextDiff()\" title=\"下一个差异 (Shift+↓)\">&#9660;</button>");
         h.append("</div>");
         h.append("<button onclick=\"closeDiff()\">&#10005; 关闭</button>");
-        h.append("</div><div id=\"diffAiBox\"><div id=\"diffAiHeader\" onclick=\"toggleAiBox()\"><span id=\"diffAiTitle\">AI 报告</span><button id=\"diffAiToggle\">▾ 收起</button></div><pre id=\"diffAiBody\"></pre></div>");
+        h.append("</div><div id=\"diffAiBox\"><div id=\"diffAiHeader\" onclick=\"toggleAiBox()\"><span id=\"diffAiTitle\">AI 报告</span><button id=\"diffAiToggle\">▾ 收起</button></div><div id=\"diffAiBody\"></div></div>");
         h.append("<div id=\"diffLabels\"><span>旧版</span><span>新版</span></div>");
         h.append("<div id=\"diffContent\"><div id=\"diffOldCol\"></div><div id=\"diffNewCol\"></div></div>");
         h.append("</div>\n");
@@ -619,8 +619,16 @@ public class Reporter {
         h.append("#diffAiTitle{flex:1;font-size:12px;font-weight:600;color:#92400e}\n");
         h.append("#diffAiToggle{background:none;border:1px solid #fde68a;color:#92400e;font-size:11px;padding:2px 8px;border-radius:4px;cursor:pointer}\n");
         h.append("#diffAiToggle:hover{background:#fef3c7}\n");
-        h.append("#diffAiBody{margin:0;padding:0 16px 10px;font-size:12px;color:#92400e;white-space:pre-wrap;line-height:1.5;max-height:200px;overflow:auto;font-family:inherit}\n");
+        h.append("#diffAiBody{margin:0;font-size:12px;color:#92400e;line-height:1.5;max-height:200px;overflow:auto;font-family:inherit}\n");
+        h.append("#diffAiBody>pre{margin:0;padding:0 16px 10px;white-space:pre-wrap}\n");
         h.append("#diffAiBox.collapsed #diffAiBody{display:none}\n");
+        h.append(".ai-tbl{width:100%;border-collapse:collapse;font-size:11px}\n");
+        h.append(".ai-tbl th{background:#fef3c7;padding:4px 8px;text-align:left;border-bottom:1px solid #fde68a;color:#92400e;position:sticky;top:0}\n");
+        h.append(".ai-tbl td{padding:4px 8px;border-bottom:1px solid #fef3c7;cursor:pointer;vertical-align:top}\n");
+        h.append(".ai-tbl td:first-child{white-space:nowrap;max-width:180px;overflow:hidden;text-overflow:ellipsis}\n");
+        h.append(".ai-tbl td:last-child{min-width:180px}\n");
+        h.append(".ai-tbl tr:hover td{background:#fef3c7}\n");
+        h.append(".diff-row.ai-match{box-shadow:inset 3px 0 0 #f59e0b;background:rgba(245,158,11,.08)}\n");
         h.append("#diffLabels{display:flex;background:#f1f5f9;border-bottom:1px solid #e5e7eb}\n");
         h.append("#diffLabels span{flex:1;padding:7px 16px;font-size:12px;color:#64748b;text-align:center;font-weight:600}\n");
         h.append("#diffLabels span+span{border-left:1px solid #e5e7eb}\n");
@@ -720,8 +728,16 @@ public class Reporter {
                 .append("var aiBox=document.getElementById('diffAiBox');")
                 .append("var aiBody=document.getElementById('diffAiBody');")
                 .append("var aiToggle=document.getElementById('diffAiToggle');")
-                .append("if(d.ai){aiBody.textContent=d.ai;aiBox.classList.remove('collapsed');")
-                .append("aiToggle.textContent='▾ 收起';aiBox.style.display='block'}")
+                .append("if(d.ai){var findings=[];var re=/【差异位置】(.+?)\\s*【差异概述】：(.+)/g;var m;")
+                .append("while((m=re.exec(d.ai))!==null){")
+                .append("findings.push({loc:m[1].trim(),desc:m[2].trim()})}")
+                .append("if(findings.length>0){var h='<table class=\"ai-tbl\"><thead><tr><th>位置</th><th>差异描述</th></tr></thead><tbody>';")
+                .append("for(var fi=0;fi<findings.length;fi++){var f=findings[fi];")
+                .append("h+='<tr onclick=\"scrollToAiFinding('+fi+')\" title=\"点击跳转到差异位置\">';")
+                .append("h+='<td>'+escHtml(f.loc)+'</td><td>'+escHtml(f.desc)+'</td></tr>'}")
+                .append("h+='</tbody></table>';aiBody.innerHTML=h}")
+                .append("else{aiBody.innerHTML='<pre>'+escHtml(d.ai)+'</pre>'}")
+                .append("aiBox.classList.remove('collapsed');aiToggle.textContent='▾ 收起';aiBox.style.display='block'}")
                 .append("else{aiBox.style.display='none'}")
                 .append("var oldLines=collapseBlanks(d.old.replace(/\\r/g,'').split('\\n'));")
                 .append("var newLines=collapseBlanks(d.new.replace(/\\r/g,'').split('\\n'));")
@@ -775,8 +791,25 @@ public class Reporter {
                 .append("var t=document.getElementById('diffAiToggle');")
                 .append("if(b.classList.contains('collapsed')){b.classList.remove('collapsed');t.textContent='▾ 收起'}")
                 .append("else{b.classList.add('collapsed');t.textContent='▸ 展开'}}\n");
-        h.append("function closeDiff(){document.getElementById('diffPanel').classList.remove('show');")
+        h.append("function closeDiff(){var prev=document.querySelectorAll('.diff-row.ai-match');")
+                .append("for(var pi=0;pi<prev.length;pi++)prev[pi].classList.remove('ai-match');")
+                .append("document.getElementById('diffPanel').classList.remove('show');")
                 .append("document.body.style.overflow=''}\n");
+        h.append("function scrollToAiFinding(findingIndex){")
+                .append("if(!diffBlocks||findingIndex>=diffBlocks.length)return;")
+                .append("var block=diffBlocks[findingIndex];")
+                .append("currentDiffIdx=findingIndex;")
+                .append("document.getElementById('diffPos').textContent='差异 '+(findingIndex+1)+'/'+diffBlocks.length;")
+                .append("var els=document.querySelectorAll('.diff-row.highlight');")
+                .append("for(var hi=0;hi<els.length;hi++)els[hi].classList.remove('highlight');")
+                .append("for(var r=block.start;r<=block.end;r++){")
+                .append("var drs=document.querySelectorAll('.diff-row[data-dr=\"'+r+'\"]');")
+                .append("for(var di=0;di<drs.length;di++)drs[di].classList.add('highlight','ai-match')}")
+                .append("var first=document.querySelector('.diff-row[data-dr=\"'+block.start+'\"]');")
+                .append("if(first){var oldCol=document.getElementById('diffOldCol');")
+                .append("var newCol=document.getElementById('diffNewCol');")
+                .append("var top=first.getBoundingClientRect().top-oldCol.getBoundingClientRect().top+oldCol.scrollTop-oldCol.clientHeight/2;")
+                .append("oldCol.scrollTop=top;newCol.scrollTop=top}}\n");
         h.append("function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}\n");
         h.append("document.addEventListener('keydown',function(e){")
                 .append("if(!document.getElementById('diffPanel').classList.contains('show'))return;")
