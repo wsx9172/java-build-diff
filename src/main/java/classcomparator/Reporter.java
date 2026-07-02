@@ -593,8 +593,9 @@ public class Reporter {
         h.append("td{padding:7px 12px;font-size:12px;border-bottom:1px solid #f1f5f9}\n");
         h.append("tr:hover{background:#f8fafc}\n");
         h.append(".cn{font-family:'SF Mono','Cascadia Code','Consolas',monospace;font-size:11px;max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}\n");
-        h.append(".cn.clickable{color:#3b82f6;cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px}\n");
-        h.append(".cn.clickable:hover{color:#1d4ed8}\n");
+        h.append(".cn.clickable{color:#1e293b;cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px}\n");
+        h.append(".cn.clickable:hover{color:#3b82f6}\n");
+        h.append(".cn.clickable.visited{color:#1d4ed8;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px}\n");
         h.append(".badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;white-space:nowrap}\n");
         h.append(".badge.ok{background:#dcfce7;color:#16a34a}\n");
         h.append(".badge.dec{background:#fef9c3;color:#ca8a04}\n");
@@ -696,6 +697,8 @@ public class Reporter {
                 .append("return{old:pre+'<b>'+osMid+'</b>'+suf,new:pre+'<b>'+nsMid+'</b>'+suf}}\n");
         h.append("function showDiff(file,title){document.getElementById('diffTitle').textContent=title;")
                 .append("document.getElementById('diffPanel').classList.add('show');")
+                .append("var td=document.querySelector('[data-detail=\"'+file+'\"] .cn.clickable');")
+                .append("if(td)td.classList.add('visited');")
                 .append("function render(){var d=DETAIL_DATA[file];")
                 .append("if(!d){document.getElementById('diffOldCol').innerHTML='<div style=\"padding:20px;color:#999\">加载详情失败</div>';")
                 .append("document.getElementById('diffNewCol').innerHTML='';")
