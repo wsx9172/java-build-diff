@@ -728,7 +728,7 @@ public class Reporter {
                 .append("var aiBox=document.getElementById('diffAiBox');")
                 .append("var aiBody=document.getElementById('diffAiBody');")
                 .append("var aiToggle=document.getElementById('diffAiToggle');")
-                .append("if(d.ai){var findings=[];var re=/【差异位置】(.+?)\\s*【差异概述】：(.+)/g;var m;")
+                .append("if(d.ai){var findings=[];var re=/【(?:差异)?位置】(.+?)\\s*【(?:差异)?概述】：(.+)/g;var m;")
                 .append("while((m=re.exec(d.ai))!==null){")
                 .append("findings.push({loc:m[1].trim(),desc:m[2].trim()})}")
                 .append("if(findings.length>0){var h='<table class=\"ai-tbl\"><thead><tr><th>位置</th><th>差异描述</th></tr></thead><tbody>';")
