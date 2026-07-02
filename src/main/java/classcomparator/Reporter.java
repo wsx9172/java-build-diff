@@ -601,7 +601,7 @@ public class Reporter {
         h.append(".badge.dec{background:#fef9c3;color:#ca8a04}\n");
         h.append(".badge.diff{background:#fee2e2;color:#dc2626}\n");
         h.append(".badge.miss{background:#f1f5f9;color:#64748b}\n");
-        h.append("#diffPanel{position:fixed;top:0;left:0;width:100vw;height:100vh;background:#fff;color:#333;z-index:1000;display:none;flex-direction:column}\n");
+        h.append("#diffPanel{position:fixed;top:0;left:0;width:100vw;height:100vh;background:#fff;color:#333;z-index:1000;display:none;flex-direction:column;overflow:hidden}\n");
         h.append("#diffPanel.show{display:flex}\n");
         h.append("#diffHeader{display:flex;align-items:center;padding:10px 16px;background:#f8fafc;border-bottom:1px solid #e5e7eb;font-size:13px}\n");
         h.append("#diffHeader>*{margin-right:10px}\n");
@@ -625,8 +625,8 @@ public class Reporter {
         h.append("#diffLabels span{flex:1;padding:7px 16px;font-size:12px;color:#64748b;text-align:center;font-weight:600}\n");
         h.append("#diffLabels span+span{border-left:1px solid #e5e7eb}\n");
         h.append("#diffContent{flex:1;display:flex;overflow:hidden}\n");
-        h.append("#diffContent>div{flex:1;overflow:auto;min-height:0;font-family:'SF Mono','Cascadia Code',Consolas,monospace;font-size:12px;line-height:1.6}\n");
-        h.append("#diffContent>div+div{border-left:1px solid #e5e7eb}\n");
+        h.append("#diffOldCol,#diffNewCol{flex:1;overflow-y:auto;min-height:0;font-family:'SF Mono','Cascadia Code',Consolas,monospace;font-size:12px;line-height:1.6}\n");
+        h.append("#diffNewCol{border-left:1px solid #e5e7eb}\n");
         h.append(".diff-row{display:flex;min-height:1.45em}\n");
         h.append(".diff-row .ln{display:inline-block;min-width:42px;padding:0 8px 0 4px;text-align:right;color:#94a3b8;user-select:none;flex-shrink:0}\n");
         h.append(".diff-row .code{flex:1;white-space:pre;padding-right:12px}\n");
@@ -695,7 +695,8 @@ public class Reporter {
                 .append("var nsMid=escHtml(ns.substring(i,nlen-j));")
                 .append("var suf=escHtml(os.substring(olen-j));")
                 .append("return{old:pre+'<b>'+osMid+'</b>'+suf,new:pre+'<b>'+nsMid+'</b>'+suf}}\n");
-        h.append("function showDiff(file,title){document.getElementById('diffTitle').textContent=title;")
+        h.append("function showDiff(file,title){document.body.style.overflow='hidden';")
+                .append("document.getElementById('diffTitle').textContent=title;")
                 .append("document.getElementById('diffPanel').classList.add('show');")
                 .append("var td=document.querySelector('[data-detail=\"'+file+'\"] .cn.clickable');")
                 .append("if(td)td.classList.add('visited');")
@@ -737,11 +738,10 @@ public class Reporter {
                 .append("else{ocode=escHtml(ocode);ncode=escHtml(ncode)}")
                 .append("ohtml+='<div class=\"diff-row '+row.type+'\" data-dr=\"'+r+'\"><span class=\"ln\">'+onum+'</span><span class=\"code\">'+ocode+'</span></div>';")
                 .append("nhtml+='<div class=\"diff-row '+row.type+'\" data-dr=\"'+r+'\"><span class=\"ln\">'+nnum+'</span><span class=\"code\">'+ncode+'</span></div>'}")
-                .append("document.getElementById('diffOldCol').innerHTML=ohtml;")
-                .append("document.getElementById('diffNewCol').innerHTML=nhtml;")
+                .append("var oc=document.getElementById('diffOldCol');oc.innerHTML=ohtml;oc.scrollTop=0;")
+                .append("var nc=document.getElementById('diffNewCol');nc.innerHTML=nhtml;nc.scrollTop=0;")
                 .append("currentDiffIdx=-1;")
-                .append("document.getElementById('diffPos').textContent=diffBlocks.length>0?'差异 1/'+diffBlocks.length:'-';")
-                .append("syncScroll('old')}")
+                .append("document.getElementById('diffPos').textContent=diffBlocks.length>0?'差异 1/'+diffBlocks.length:'-';}")
                 .append("if(DETAIL_DATA[file]){render()}else{")
                 .append("document.getElementById('diffOldCol').innerHTML='<div style=\"padding:20px;color:#999\">加载中...</div>';")
                 .append("document.getElementById('diffNewCol').innerHTML='';")
@@ -766,18 +766,17 @@ public class Reporter {
                 .append("var drs=document.querySelectorAll('.diff-row[data-dr=\"'+r+'\"]');")
                 .append("for(var di=0;di<drs.length;di++)drs[di].classList.add('highlight')}")
                 .append("var first=document.querySelector('.diff-row[data-dr=\"'+block.start+'\"]');")
-                .append("if(first){var c=document.getElementById('diffOldCol');c.scrollTop=first.getBoundingClientRect().top-c.getBoundingClientRect().top+c.scrollTop-c.clientHeight/2}")
-                .append("document.getElementById('diffPos').textContent='差异 '+(currentDiffIdx+1)+'/'+diffBlocks.length}\n");
-        h.append("function syncScroll(src){")
-                .append("var oldCol=document.getElementById('diffOldCol');")
+                .append("if(first){var oldCol=document.getElementById('diffOldCol');")
                 .append("var newCol=document.getElementById('diffNewCol');")
-                .append("if(src==='old'){oldCol.onscroll=function(){newCol.scrollTop=oldCol.scrollTop};newCol.onscroll=null}")
-                .append("else{newCol.onscroll=function(){oldCol.scrollTop=newCol.scrollTop};oldCol.onscroll=null}}\n");
+                .append("var top=first.getBoundingClientRect().top-oldCol.getBoundingClientRect().top+oldCol.scrollTop-oldCol.clientHeight/2;")
+                .append("oldCol.scrollTop=top;newCol.scrollTop=top;}")
+                .append("document.getElementById('diffPos').textContent='差异 '+(currentDiffIdx+1)+'/'+diffBlocks.length}\n");
         h.append("function toggleAiBox(){var b=document.getElementById('diffAiBox');")
                 .append("var t=document.getElementById('diffAiToggle');")
                 .append("if(b.classList.contains('collapsed')){b.classList.remove('collapsed');t.textContent='▾ 收起'}")
                 .append("else{b.classList.add('collapsed');t.textContent='▸ 展开'}}\n");
-        h.append("function closeDiff(){document.getElementById('diffPanel').classList.remove('show')}\n");
+        h.append("function closeDiff(){document.getElementById('diffPanel').classList.remove('show');")
+                .append("document.body.style.overflow=''}\n");
         h.append("function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}\n");
         h.append("document.addEventListener('keydown',function(e){")
                 .append("if(!document.getElementById('diffPanel').classList.contains('show'))return;")
